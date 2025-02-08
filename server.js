@@ -26,7 +26,7 @@ const db = new sqlite3.Database("./database/database.db", (err) => {
   console.log("Connected to SQLite database.");
 });
 
-// Create Tables
+// Create Users Table
 db.run(`
   CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -34,6 +34,8 @@ db.run(`
     password TEXT
   )
 `);
+
+// Create Discussions Table
 db.run(`
   CREATE TABLE IF NOT EXISTS discussions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -43,7 +45,7 @@ db.run(`
   )
 `);
 
-// Authentication Routes
+// User Registration
 app.post("/register", (req, res) => {
   const { username, password } = req.body;
   bcrypt.hash(password, 10, (err, hash) => {
@@ -55,6 +57,7 @@ app.post("/register", (req, res) => {
   });
 });
 
+// User Login
 app.post("/login", (req, res) => {
   const { username, password } = req.body;
   db.get("SELECT * FROM users WHERE username = ?", [username], (err, user) => {
@@ -67,9 +70,16 @@ app.post("/login", (req, res) => {
   });
 });
 
+// User Logout
 app.get("/logout", (req, res) => {
   req.session.destroy(() => res.redirect("/login.html"));
 });
+
+// Middleware to Check If Logged In
+const isAuthenticated = (req, res, next) => {
+  if (!req.session.user) return res.redirect("/login.html");
+  next();
+};
 
 // Fetch Anime List
 app.get("/anime", async (req, res) => {
@@ -81,8 +91,8 @@ app.get("/anime", async (req, res) => {
   }
 });
 
-// Fetch Discussions for Anime
-app.get("/discussions/:animeId", (req, res) => {
+// Fetch Discussions
+app.get("/discussions/:animeId", isAuthenticated, (req, res) => {
   db.all("SELECT * FROM discussions WHERE animeId = ?", [req.params.animeId], (err, rows) => {
     if (err) return res.status(500).send("Error fetching discussions.");
     res.json(rows);
@@ -90,8 +100,7 @@ app.get("/discussions/:animeId", (req, res) => {
 });
 
 // Post a Discussion
-app.post("/discussions", (req, res) => {
-  if (!req.session.user) return res.status(401).send("Login required.");
+app.post("/discussions", isAuthenticated, (req, res) => {
   const { animeId, message } = req.body;
   db.run("INSERT INTO discussions (animeId, user, message) VALUES (?, ?, ?)", [animeId, req.session.user, message], (err) => {
     if (err) return res.status(500).send("Error saving discussion.");
@@ -100,4 +109,4 @@ app.post("/discussions", (req, res) => {
 });
 
 app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
-        
+    
