@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Discussion</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+</head>
+<body>
+    <div class="container">
+        <h1 class="text-center my-4">Anime Discussion</h1>
+        <div id="discussionList" class="mb-4"></div>
+
+        <form action="/discussions" method="POST">
+            <input type="hidden" name="animeId" id="animeId">
+            <textarea name="message" required class="form-control mb-2" placeholder="Write your comment..."></textarea>
+            <button type="submit" class="btn btn-primary">Post</button>
+        </form>
+    </div>
+
+    <script>
+      const urlParams = new URLSearchParams(window.location.search);
+      const animeId = urlParams.get("animeId");
+      document.getElementById("animeId").value = animeId;
+
+      fetch(`/discussions/${animeId}`)
+        .then(res => res.json())
+        .then(data => {
+          const list = document.getElementById("discussionList");
+          data.forEach(({ user, message }) => {
+            const div = document.createElement("div");
+            div.classList.add("alert", "alert-secondary");
+            div.innerHTML = `<strong>${user}:</strong> ${message}`;
+            list.appendChild(div);
+          });
+        });
+    </script>
+</body>
+</html>
