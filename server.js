@@ -1,69 +1,103 @@
 const express = require("express");
-const axios = require("axios");
+const session = require("express-session");
+const bcrypt = require("bcryptjs");
 const sqlite3 = require("sqlite3").verbose();
+const axios = require("axios");
 const path = require("path");
 
 const app = express();
-const db = new sqlite3.Database("./discussions.db");
+const PORT = 3000;
 
 // Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(express.static(path.join(__dirname, "public")));
+app.use(express.static("public"));
+app.use(
+  session({
+    secret: "secret-key",
+    resave: false,
+    saveUninitialized: true,
+  })
+);
 
-// Create discussions table
+// Database Setup
+const db = new sqlite3.Database("./database/database.db", (err) => {
+  if (err) console.error(err);
+  console.log("Connected to SQLite database.");
+});
+
+// Create Tables
 db.run(`
-    CREATE TABLE IF NOT EXISTS discussions (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        anime_id TEXT,
-        name TEXT,
-        message TEXT
-    )
+  CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT UNIQUE,
+    password TEXT
+  )
+`);
+db.run(`
+  CREATE TABLE IF NOT EXISTS discussions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    animeId TEXT,
+    user TEXT,
+    message TEXT
+  )
 `);
 
-// Fetch anime list from API
-app.get("/anime", async (req, res) => {
-    try {
-        const response = await axios.get("https://fetch-manual-anime.vercel.app");
-        const animeList = response.data.map(anime => ({
-            animeId: anime.animeId,
-            posterUrl: anime.posterUrl
-        }));
-        res.json(animeList);
-    } catch (error) {
-        res.status(500).json({ error: "Failed to fetch anime" });
-    }
-});
-
-// Get discussions for an anime
-app.get("/discussions/:anime_id", (req, res) => {
-    db.all(
-        "SELECT * FROM discussions WHERE anime_id = ?",
-        [req.params.anime_id],
-        (err, rows) => {
-            if (err) return res.status(500).json({ error: err.message });
-            res.json(rows);
-        }
-    );
-});
-
-// Post a discussion
-app.post("/discussions", (req, res) => {
-    const { anime_id, name, message } = req.body;
-    if (!anime_id || !name || !message) return res.status(400).json({ error: "All fields are required" });
-
-    db.run("INSERT INTO discussions (anime_id, name, message) VALUES (?, ?, ?)", [anime_id, name, message], function (err) {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json({ id: this.lastID });
+// Authentication Routes
+app.post("/register", (req, res) => {
+  const { username, password } = req.body;
+  bcrypt.hash(password, 10, (err, hash) => {
+    if (err) return res.status(500).send("Error hashing password.");
+    db.run("INSERT INTO users (username, password) VALUES (?, ?)", [username, hash], (err) => {
+      if (err) return res.status(400).send("Username already exists.");
+      res.redirect("/login.html");
     });
+  });
 });
 
-// Serve homepage
-app.get("/", (req, res) => {
-    res.sendFile(path.join(__dirname, "public", "index.html"));
+app.post("/login", (req, res) => {
+  const { username, password } = req.body;
+  db.get("SELECT * FROM users WHERE username = ?", [username], (err, user) => {
+    if (err || !user) return res.status(400).send("Invalid username or password.");
+    bcrypt.compare(password, user.password, (err, result) => {
+      if (!result) return res.status(400).send("Invalid password.");
+      req.session.user = username;
+      res.redirect("/");
+    });
+  });
 });
 
-// Start server
-const PORT = process.env.PORT || 3000;
+app.get("/logout", (req, res) => {
+  req.session.destroy(() => res.redirect("/login.html"));
+});
+
+// Fetch Anime List
+app.get("/anime", async (req, res) => {
+  try {
+    const { data } = await axios.get("https://fetch-manual-anime.vercel.app");
+    res.json(data);
+  } catch (error) {
+    res.status(500).send("Error fetching anime.");
+  }
+});
+
+// Fetch Discussions for Anime
+app.get("/discussions/:animeId", (req, res) => {
+  db.all("SELECT * FROM discussions WHERE animeId = ?", [req.params.animeId], (err, rows) => {
+    if (err) return res.status(500).send("Error fetching discussions.");
+    res.json(rows);
+  });
+});
+
+// Post a Discussion
+app.post("/discussions", (req, res) => {
+  if (!req.session.user) return res.status(401).send("Login required.");
+  const { animeId, message } = req.body;
+  db.run("INSERT INTO discussions (animeId, user, message) VALUES (?, ?, ?)", [animeId, req.session.user, message], (err) => {
+    if (err) return res.status(500).send("Error saving discussion.");
+    res.redirect(`/discussion.html?animeId=${animeId}`);
+  });
+});
+
 app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
-  
+        
