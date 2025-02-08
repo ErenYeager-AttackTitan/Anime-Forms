@@ -7,10 +7,31 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
     <script defer src="/js/script.js"></script>
 </head>
-<body>
+    <body>
+    <nav class="navbar navbar-light bg-light">
+        <div class="container">
+            <a class="navbar-brand">Anime Discussions</a>
+            <div id="authLinks"></div>
+        </div>
+    </nav>
     <div class="container">
         <h1 class="text-center my-4">Anime Discussions</h1>
         <div id="animeList" class="row"></div>
     </div>
-</body>
+
+    <script>
+        fetch("/session")
+            .then(res => res.json())
+            .then(data => {
+                const authLinks = document.getElementById("authLinks");
+                if (data.loggedIn) {
+                    authLinks.innerHTML = `<a href="/logout" class="btn btn-danger">Logout</a>`;
+                } else {
+                    authLinks.innerHTML = `<a href="/login.html" class="btn btn-primary">Login</a>`;
+                }
+            });
+    </script>
+    </body>
+    
+    
 </html>
